@@ -7,8 +7,30 @@ import argparse
 def usage():
     test="name"
     message='''
-    python CircosConf.py --input circos.config --output test
-    Produce Conf file for circos: test
+python CircosConf.py --input circos.config --output pipe.conf
+
+Produce Conf file for circos and run circos (Based on circos v0.64 2 May 2013).
+Config file format:
+###############################
+#Config file for circos Wrapper
+#1. chromosome file, which contains chromosome name and length, will be used to create a karyotype file
+#Format: Chr01	43270923
+#2. feature, like histogram, highlight and heatmap used to display in circos
+#Format histogram: chr01 0 99999 16.575
+#Format highlight: chr01 40180 57658 fill_color=red
+#Format heatmap: chr01 0 4999999 80510.000000 
+#########################################
+#File	Type	Color	BackgroundColor	Min	Max	Rank
+circos.chrlen	chromosome	NA	0	0	0	0
+Rice.RT.histogram.txt	histogram	green	1	0	80	5
+Rice.exon.histogram.txt	histogram	orange	0	0	24	5
+Rice.RT.histogram.txt	heatmap	NA	0	0	80	4
+Rice.exon.histogram.txt	heatmap	NA	0	0	24	3
+Rice.RT.histogram.txt	line	vdorange	0	0	80	4
+Rice.exon.histogram.txt	line	vdorange	0	0	24	3
+contract.highlight.txt	highlight	red	0	0	0	2
+expand.highlight.txt	highlight	blue	0	0	0	1
+
     '''
     print message
 
@@ -20,9 +42,10 @@ def ideogram(chrp):
 
 default = 1u  #    0.05r
 break   = 0r   # 0.35r
-#<pairwise Foc1_chr01;Foc4_chr01>
-#spacing = 200u
-#</pairwise>
+
+<pairwise chr12;chr01>
+spacing = 5u
+</pairwise>
 
 axis_break_at_edge = no
 axis_break         = no
@@ -62,6 +85,8 @@ label_radius   = '''+chrp+'''r
 label_size     = 40p
 label_parallel = yes
 label_center   = no
+rotation       = 180
+label_rotate   = yes
 
 # cytogenetic bands
 band_stroke_thickness = 0
@@ -103,13 +128,14 @@ grid_thickness = 1p
 </tick>
 
 <tick>
+skip_first_label     = yes
 spacing        = 10u
 size           = 20p
 thickness      = 2p
 color          = black
 show_label     = yes
 label_size     = 30p
-label_offset   = 0p
+label_offset   = 10p
 format         = %d
 grid           = yes
 grid_color     = dgrey
@@ -117,17 +143,20 @@ grid_thickness = 1p
 </tick>
 
 <tick>
-show           = yes
-position       = start
-size           = 20p
-label_size     = 30p
-label_offset   =0p
-label          = 0
-color          = black
-suffix         = Mb
-format         = %s
-thickness      = 2p
+
+position       = 0.01u
+label          = 0 (Mb)
 show_label     = yes
+label_offset   = 10p
+label_size     = 30p
+size           = 20p
+color          = black
+thickness      = 2p
+format         = %d
+grid           = yes
+grid_color     = dgrey
+grid_thickness = 1p
+
 </tick>
 
 </ticks>
@@ -136,9 +165,9 @@ show_label     = yes
         tickfh.write(tick)
  
 
-def header(ideogram,ticks):
+def header(ideogram,ticks, karyotype):
     header='''
-karyotype   = circos.karyotype
+karyotype   = '''+karyotype+'''
 
 chromosomes_units = 1000000
 chromosomes_display_default = yes
@@ -168,7 +197,7 @@ png = yes
 radius         = 1500p
 background     = white
 # by default angle=0 is at 3 o'clock position
-angle_offset   = -90
+angle_offset   = -88
 #transparent
 auto_alpha_colors = yes
 auto_alpha_steps = 40
@@ -178,6 +207,10 @@ auto_alpha_steps = 40
 # RGB/HSV color definitions, color lists, location of fonts
 <<include etc/colors_fonts_patterns.conf>> 
 <<include etc/brewer.conf>>
+<colors>
+greent   = 51,204,94,0.8
+oranget  = 253,141,60,0.8
+</colors>
 
 # Debugging, I/O an dother system parameters
 # Included from Circos distribution.
@@ -256,16 +289,24 @@ color = vvlgrey
 </plot>
 
 '''
+    linecolor='''
+
+color     = '''+color+'''
+thickness = 5
+
+</plot>
+
+''' 
+ 
     if style == 'histogram':
-        print bg
         if bg == '1':
-            print 'drawbg'
             plot = plot + histcolor + background
         else:
-            print 'drawno'
             plot = plot + histcolor + nobackground
-    else:
+    elif style == 'heatmap':
         plot = plot + heatcolor
+    elif style == 'line':
+        plot = plot + linecolor
     return plot
 
 def highlight(hlight,r0,r1):
@@ -279,6 +320,28 @@ r1 = '''+r1+'''r
 
 '''
     return highlight
+
+def karyotype(chrlen,karyo):
+    kline=[]
+    with open (chrlen,'r') as length:
+        chrs=length.readlines()
+        for c in chrs:
+            c=c.rstrip()
+            cs=c.split('\t')
+            s = re.compile(r'^\w+')
+            if s.search(c):
+                s = re.compile(r'\d+')
+                ss= s.search(cs[0])
+                chrnum=ss.group(0)
+                s = re.compile(r'(?<=0)\d+')
+                ss = s.search(chrnum)
+                if ss:
+                    chrnum = ss.group(0)
+                line = 'chr - '+cs[0]+' '+cs[0]+' 0 '+cs[1]+' chr'+chrnum
+                kline.append(line)
+    with open (karyo, 'w') as kfile:
+        for l in kline:
+            kfile.write(l+'\n') 
 
 def circos(config, circosconf):
     binh = 0.15
@@ -294,7 +357,7 @@ def circos(config, circosconf):
             feild=line.split('\t')
             s = re.compile(r'^\w+')
             if s.search(line):
-                if feild[1] == 'histogram' or feild[1] == 'heatmap':
+                if feild[1] == 'histogram' or feild[1] == 'heatmap' or feild[1] == 'line':
                     histfile = feild[0]
                     style    = feild[1]
                     color    = feild[2]
@@ -319,10 +382,14 @@ def circos(config, circosconf):
                         chrp  = tickp + 0.15
                     print rank, r0, r1
                     highlights.append(highlight(highfile,r0,r1))
+                elif feild[1] == 'chromosome':
+                    chrlen   = feild[0]
+                    karyotype(chrlen,'pipe.karyotype')
+
     ideogram(str(chrp))
     tick(str(tickp)) 
     with open (circosconf,'w') as conf:
-        conf.write(header('pipe.ideogram.conf','pipe.ticks.conf'))
+        conf.write(header('pipe.ideogram.conf','pipe.ticks.conf','pipe.karyotype'))
         conf.write('<plots>')
         for p in plots:
             conf.write(p)
