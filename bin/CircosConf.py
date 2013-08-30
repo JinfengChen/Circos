@@ -1,6 +1,7 @@
 #!/opt/Python/2.7.3/bin/python
 import sys
 import re
+import os
 import argparse
 
 def usage():
@@ -11,7 +12,7 @@ def usage():
     '''
     print message
 
-def ideogram():
+def ideogram(chrp):
     ideo='''
 <ideogram>
 
@@ -57,7 +58,7 @@ radius         = 0.4r
 show_label     = yes
 label_with_tag = yes
 label_font     = condensedbold
-label_radius   = 1.8r
+label_radius   = '''+chrp+'''r
 label_size     = 40p
 label_parallel = yes
 label_center   = no
@@ -75,7 +76,7 @@ fill_bands            = no
     with open('pipe.ideogram.conf','w') as ideofh:
         ideofh.write(ideo)
 
-def tick():
+def tick(tickp):
     tick='''
 show_ticks          = yes
 show_tick_labels    = yes
@@ -83,7 +84,7 @@ show_tick_labels    = yes
 <ticks>
 skip_first_label     = no
 skip_last_label      = no
-radius               = 1.65r
+radius               = '''+tickp+'''r
 multiplier = 1e-6
 color = black
 
@@ -121,7 +122,7 @@ position       = start
 size           = 20p
 label_size     = 30p
 label_offset   =0p
-label          = 0'
+label          = 0
 color          = black
 suffix         = Mb
 format         = %s
@@ -135,7 +136,7 @@ show_label     = yes
         tickfh.write(tick)
  
 
-def header():
+def header(ideogram,ticks):
     header='''
 karyotype   = circos.karyotype
 
@@ -144,13 +145,13 @@ chromosomes_display_default = yes
 chromosomes = chr01;chr02;chr03;chr04;chr05;chr06;chr07;chr08;chr09;chr10;chr11;chr12
 
 ######################################################################
-<<include ideogram.conf>>
-<<include ticks.conf>>
+<<include '''+ideogram+'''>>
+<<include '''+ticks+'''>>
 ####################################################################
 '''
     return header
 
-def image():
+def image(png):
     image='''
 ################################################################
 # The remaining content is standard and required. It is imported from
@@ -159,7 +160,7 @@ def image():
 <image>
 
 dir = ./
-file  = circos.SD.png
+file  = '''+png+'''
 svg = yes
 png = yes
 24bit = yes
@@ -208,7 +209,7 @@ file = '''+linkfile+'''
 '''
     return link
 
-def plot(hist,style,color,minx,maxx,r0,r1):
+def plot(hist,style,color,minx,maxx,r0,r1,bg):
     plot='''
 
 <plot>
@@ -216,13 +217,19 @@ def plot(hist,style,color,minx,maxx,r0,r1):
 file = '''+hist+'''
 type = '''+style+'''
 
-r0 = '''+r0+'''
-r1 = '''+r1+'''
+r0 = '''+r0+'''r
+r1 = '''+r1+'''r
 
 min='''+minx+'''
-max='''+maxx
+max='''+maxx+'''
+
+'''
+
     heatcolor='''
 color = spectral-9-div-rev
+
+</plot>
+
 '''
     histcolor='''
 color     = '''+color+'''
@@ -231,6 +238,14 @@ fill_color = '''+color+'''
 thickness = 2
 
 extend_bin = no
+
+''' 
+    nobackground='''
+
+</plot>
+
+'''
+    background='''
 
 <backgrounds>
 <background>
@@ -242,7 +257,13 @@ color = vvlgrey
 
 '''
     if style == 'histogram':
-        plot = plot + histcolor
+        print bg
+        if bg == '1':
+            print 'drawbg'
+            plot = plot + histcolor + background
+        else:
+            print 'drawno'
+            plot = plot + histcolor + nobackground
     else:
         plot = plot + heatcolor
     return plot
@@ -252,16 +273,18 @@ def highlight(hlight,r0,r1):
 
 <highlight>
 file = '''+hlight+'''
-r0 = '''+r0+'''
-r1 = '''+r1+'''
+r0 = '''+r0+'''r
+r1 = '''+r1+'''r
 </highlight>
 
 '''
     return highlight
 
-def circos(config):
+def circos(config, circosconf):
     binh = 0.15
     bini = 0.05
+    tickp = 0
+    chrp  = 0
     plots=[]
     highlights=[]
     with open(config, 'r') as configfh:
@@ -271,33 +294,44 @@ def circos(config):
             feild=line.split('\t')
             s = re.compile(r'^\w+')
             if s.search(line):
-                print line
-'''
-            if feild[1] == 'histogram' or feild[1] == 'heatmap':
-                histfile = feild[0]
-                style    = feild[1]
-                color    = feild[2]
-                minx     = feild[3]
-                maxx     = feild[4]
-                rank     = feild[5]
-                r0       = bini*rank + binh*(rank-1)
-                r1       = r0+binh
-                plots.append(plot(histfile,style,color,minx,maxx,r0,r1))
-            elif feild[1] == 'highlight':
-                highfile = feild[0]
-                rank     = feild[5]
-                r0       = bini*rank + binh*(rank-1)
-                r1       = r0+binh             
-    with open (args.output,'w') as conf:
-        conf.write(header())
+                if feild[1] == 'histogram' or feild[1] == 'heatmap':
+                    histfile = feild[0]
+                    style    = feild[1]
+                    color    = feild[2]
+                    bgcolor  = feild[3]
+                    minx     = feild[4]
+                    maxx     = feild[5]
+                    rank     = feild[6]
+                    r0       = str(1 + bini * int (rank) + binh * ( int (rank) - 1))
+                    r1       = str(float(r0) + binh)
+                    if float (r1) > tickp:
+                        tickp = float (r1)
+                        chrp  = tickp + 0.15
+                    print rank, r0, r1
+                    plots.append(plot(histfile,style,color,minx,maxx,r0,r1,bgcolor))
+                elif feild[1] == 'highlight':
+                    highfile = feild[0]
+                    rank     = feild[6]
+                    r0       = str(1 + bini * int (rank) + binh * ( int (rank) - 1))
+                    r1       = str(+ float (r0) + binh)
+                    if float (r1) > tickp:
+                        tickp = float (r1)
+                        chrp  = tickp + 0.15
+                    print rank, r0, r1
+                    highlights.append(highlight(highfile,r0,r1))
+    ideogram(str(chrp))
+    tick(str(tickp)) 
+    with open (circosconf,'w') as conf:
+        conf.write(header('pipe.ideogram.conf','pipe.ticks.conf'))
         conf.write('<plots>')
         for p in plots:
             conf.write(p)
-        conf.write('</plots>')
+        conf.write('</plots>\n')
+        conf.write('<highlights>')
         for h in highlights:
             conf.write(h)
-        conf.write(image())
-'''     
+        conf.write('</highlights>\n')
+        conf.write(image('pipe.circos.png'))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -311,13 +345,8 @@ def main():
         usage()
         sys.exit(2)
 
-    #print header()
-    #print image()
-    #print link()
-    #print highlight()
-    ideogram()
-    tick()
-    circos(args.input)
+    circos(args.input,args.output)
+    os.system('perl /rhome/cjinfeng/software/tools/circos/circos-0.64/bin/circos -conf pipe.conf')
 
 if __name__ == '__main__':
     main()
