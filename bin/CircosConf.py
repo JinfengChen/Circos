@@ -43,7 +43,7 @@ def ideogram(chrp):
 default = 1u  #    0.05r
 break   = 0r   # 0.35r
 
-<pairwise chr12;chr01>
+<pairwise Chr12;Chr1>
 spacing = 5u
 </pairwise>
 
@@ -171,7 +171,7 @@ karyotype   = '''+karyotype+'''
 
 chromosomes_units = 1000000
 chromosomes_display_default = yes
-chromosomes = chr01;chr02;chr03;chr04;chr05;chr06;chr07;chr08;chr09;chr10;chr11;chr12
+chromosomes = Chr1;Chr2;Chr3;Chr4;Chr5;Chr6;Chr7;Chr8;Chr9;Chr10;Chr11;Chr12
 
 ######################################################################
 <<include '''+ideogram+'''>>
@@ -394,10 +394,11 @@ def circos(config, circosconf):
         for p in plots:
             conf.write(p)
         conf.write('</plots>\n')
-        conf.write('<highlights>')
-        for h in highlights:
-            conf.write(h)
-        conf.write('</highlights>\n')
+        if len(highlights) > 1: 
+            conf.write('<highlights>')
+            for h in highlights:
+                conf.write(h)
+            conf.write('</highlights>\n')
         conf.write(image('pipe.circos.png'))
 
 def main():
